@@ -19,13 +19,13 @@ is_quarantined       = False
 def send_whatsapp_alert(message_text):
     try:
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        # Force raw body transmission by explicitly omitting any template parameters
-        msg = client.messages.create(
+        # Directly call messages.create using absolute dictionary parameters to prevent template mapping
+        client.api.account.messages.create(
+            to=USER_WHATSAPP_TO,
             from_=TWILIO_WHATSAPP_FROM,
-            body=message_text,
-            to=USER_WHATSAPP_TO
+            body=message_text
         )
-        print(f"[{datetime.now().strftime('%H:%M:%S GST')}] WhatsApp Alert Sent! SID: {msg.sid}")
+        print(f"[{datetime.now().strftime('%H:%M:%S GST')}] WhatsApp Alert Sent successfully.")
     except Exception as e:
         print(f"[{datetime.now().strftime('%H:%M:%S GST')}] Error sending alert: {e}")
 
