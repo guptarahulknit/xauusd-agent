@@ -19,7 +19,7 @@ is_quarantined       = False
 def send_whatsapp_alert(message_text):
     try:
         client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        # Explicitly passing body and clearing any implicit content template defaults
+        # Force raw body transmission by explicitly omitting any template parameters
         msg = client.messages.create(
             from_=TWILIO_WHATSAPP_FROM,
             body=message_text,
