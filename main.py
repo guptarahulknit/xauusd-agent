@@ -1,5 +1,3 @@
-
-cat << 'EOF' > main.py
 import os
 from datetime import datetime
 from flask import Flask, request, jsonify
@@ -52,8 +50,8 @@ def handle_tradingview_signal():
                 is_quarantined = True
                 quarantine_msg = (
                     f"AGENT QUARANTINE TRIGGERED\n\n"
-                    f"• Reason: {MAX_CONSECUTIVE_SL} consecutive Stop Loss hits.\n"
-                    f"• Status: Live dispatches PAUSED.\n\n"
+                    f"- Reason: {MAX_CONSECUTIVE_SL} consecutive Stop Loss hits.\n"
+                    f"- Status: Live dispatches PAUSED.\n\n"
                     f"Initiating strategy re-calibration..."
                 )
                 send_whatsapp_alert(quarantine_msg)
@@ -79,13 +77,13 @@ def handle_tradingview_signal():
         f"Time: {timestamp} | Timeframe: {timeframe}\n"
         f"--------------------------------------------------\n"
         f"EXECUTABLE LEVELS:\n"
-        f"• Entry Price: ${entry_price:.2f}\n"
-        f"• Stop Loss:   ${sl_price:.2f}\n"
-        f"• Take Profit:  ${tp1_price:.2f}\n"
-        f"• Target R:R:   1 : {MIN_RISK_REWARD_RATIO}\n"
+        f"- Entry Price: ${entry_price:.2f}\n"
+        f"- Stop Loss:   ${sl_price:.2f}\n"
+        f"- Take Profit:  ${tp1_price:.2f}\n"
+        f"- Target R:R:   1 : {MIN_RISK_REWARD_RATIO}\n"
         f"--------------------------------------------------\n"
         f"STRATEGY LOGIC:\n"
-        f"• {rationale}\n"
+        f"- {rationale}\n"
         f"--------------------------------------------------\n"
         f"RULE: Day-trade setup. Close all open positions before 11:30 PM GST."
     )
