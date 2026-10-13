@@ -67,7 +67,7 @@ def handle_tradingview_signal():
 
         return jsonify({"status": "SUCCESS", "consecutive_sl": consecutive_sl_count}), 200
 
-    if datetime.now().hour >= 20:
+    if datetime.now().hour >= 23:
         return jsonify({"status": "SKIPPED", "reason": "Cutoff time reached (0 overnight position rule)"}), 200
 
     action      = payload.get("action", "BUY").upper()
