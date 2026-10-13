@@ -1,14 +1,17 @@
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from flask import Flask, request, jsonify
-from twilio.rest import Client
 
 app = Flask(__name__)
 
-TWILIO_ACCOUNT_SID   = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN    = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
-USER_WHATSAPP_TO     = os.getenv("USER_WHATSAPP_TO")
+SMTP_SERVER   = "smtp.gmail.com"
+SMTP_PORT     = 587
+SMTP_EMAIL    = os.getenv("SMTP_EMAIL")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+ALERT_EMAIL   = os.getenv("ALERT_EMAIL", SMTP_EMAIL)
 
 MIN_RISK_REWARD_RATIO = 2.0
 MAX_CONSECUTIVE_SL    = 2
@@ -16,18 +19,22 @@ MAX_CONSECUTIVE_SL    = 2
 consecutive_sl_count = 0
 is_quarantined       = False
 
-def send_whatsapp_alert(message_text):
+def send_email_alert(subject, message_text):
     try:
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        # Directly call messages.create using absolute dictionary parameters to prevent template mapping
-        client.api.account.messages.create(
-            to=USER_WHATSAPP_TO,
-            from_=TWILIO_WHATSAPP_FROM,
-            body=message_text
-        )
-        print(f"[{datetime.now().strftime('%H:%M:%S GST')}] WhatsApp Alert Sent successfully.")
+        msg = MIMEMultipart()
+        msg["From"] = SMTP_EMAIL
+        msg["To"] = ALERT_EMAIL
+        msg["Subject"] = subject
+        msg.attach(MIMEText(message_text, "plain"))
+
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_EMAIL, SMTP_PASSWORD)
+        server.sendmail(SMTP_EMAIL, ALERT_EMAIL, msg.as_string())
+        server.quit()
+        print(f"[{datetime.now().strftime('%H:%M:%S GST')}] Email Alert Sent successfully.")
     except Exception as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S GST')}] Error sending alert: {e}")
+        print(f"[{datetime.now().strftime('%H:%M:%S GST')}] Error sending email alert: {e}")
 
 @app.route("/webhook", methods=["POST"])
 def handle_tradingview_signal():
@@ -50,12 +57,11 @@ def handle_tradingview_signal():
             if consecutive_sl_count >= MAX_CONSECUTIVE_SL:
                 is_quarantined = True
                 quarantine_msg = (
-                    f"AGENT QUARANTINE TRIGGERED\n\n"
-                    f"- Reason: {MAX_CONSECUTIVE_SL} consecutive Stop Loss hits.\n"
-                    f"- Status: Live dispatches PAUSED.\n\n"
+                    f"Reason: {MAX_CONSECUTIVE_SL} consecutive Stop Loss hits.\n"
+                    f"Status: Live dispatches PAUSED.\n\n"
                     f"Initiating strategy re-calibration..."
                 )
-                send_whatsapp_alert(quarantine_msg)
+                send_email_alert("🚨 AGENT QUARANTINE TRIGGERED", quarantine_msg)
         elif result == "TP":
             consecutive_sl_count = 0
 
@@ -74,7 +80,6 @@ def handle_tradingview_signal():
     timestamp = datetime.now().strftime("%I:%M %p GST")
 
     alert_text = (
-        f"XAU/USD TRADE ALERT ({action})\n"
         f"Time: {timestamp} | Timeframe: {timeframe}\n"
         f"--------------------------------------------------\n"
         f"EXECUTABLE LEVELS:\n"
@@ -89,7 +94,7 @@ def handle_tradingview_signal():
         f"RULE: Day-trade setup. Close all open positions before 11:30 PM GST."
     )
 
-    send_whatsapp_alert(alert_text)
+    send_email_alert(f"🔔 XAU/USD TRADE ALERT ({action})", alert_text)
     return jsonify({"status": "DISPATCHED", "action": action}), 200
 
 @app.route("/reset", methods=["POST"])
@@ -97,7 +102,7 @@ def reset_quarantine():
     global consecutive_sl_count, is_quarantined
     consecutive_sl_count = 0
     is_quarantined = False
-    send_whatsapp_alert("AGENT UNPAUSED: Live XAU/USD monitoring resumed.")
+    send_email_alert("AGENT UNPAUSED", "Live XAU/USD monitoring resumed.")
     return jsonify({"status": "RESUMED"}), 200
 
 if __name__ == "__main__":
