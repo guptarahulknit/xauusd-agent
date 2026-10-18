@@ -24,7 +24,6 @@ def get_live_xau_price():
     except Exception as e:
         print(f"yfinance fetch error (using fallback): {e}")
     
-    # Safe fallback price if Yahoo Finance blocks or times out
     return 4085.50
 
 def send_telegram_alert(message_text):
@@ -43,7 +42,7 @@ def send_telegram_alert(message_text):
         print(f"Telegram error: {e}")
         return False
 
-@app.route("/webhook", methods=["POST"])
+@app.route("/webhook", methods=["GET", "POST"])
 def handle_tradingview_signal():
     global consecutive_sl_count, is_quarantined
     try:
@@ -52,7 +51,6 @@ def handle_tradingview_signal():
 
         current_price = get_live_xau_price()
         
-        # Automatic Support/Resistance & Risk-to-Reward calculation
         support = round(current_price - 4.0, 2)
         resistance = round(current_price + 4.0, 2)
         
