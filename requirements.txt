@@ -1,6 +1,4 @@
 flask==3.0.0
 gunicorn==22.0.0
 requests==2.31.0
-yfinance==0.2.36
-pandas==2.1.4
-numpy==1.26.3
+yfinance==0.2.38
