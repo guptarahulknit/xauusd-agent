@@ -718,23 +718,4 @@ def realize(trade, price, qty, reason):
         try:
             c.execute("BEGIN EXCLUSIVE TRANSACTION")
             qty = min(float(qty), float(trade["remaining_quantity"]))
-            if qty <= 0:
-                c.rollback()
-                return
-
-            if trade["action"] == "BUY":
-                gross = (price - trade["entry"]) * qty * CONTRACT_MULTIPLIER
-            else:
-                gross = (trade["entry"] - price) * qty * CONTRACT_MULTIPLIER
-
-            pnl = gross - (qty * COMMISSION_PER_CONTRACT)
-            risk = float(trade["risk_per_unit"]) * qty * CONTRACT_MULTIPLIER
-            r = pnl / risk if risk else 0
-            rem = float(trade["remaining_quantity"]) - qty
-            status = "CLOSED" if rem <= 0 else ("TP1_HIT" if reason == "TP1" else "TP2_HIT")
-
-            c.execute("""UPDATE trades SET remaining_quantity=?, status=?,
-                       exit_price=?, pnl=COALESCE(pnl,0)+?,
-                       r_multiple=COALESCE(r_multiple,0)+?, exit_reason=?
-                       WHERE trade_id=?""",
-                      (max(0, rem), status, price, pnl, r, reason
+            if qty
