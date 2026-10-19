@@ -718,4 +718,100 @@ def realize(trade, price, qty, reason):
         try:
             c.execute("BEGIN EXCLUSIVE TRANSACTION")
             qty = min(float(qty), float(trade["remaining_quantity"]))
-            if qty
+            if qty <= 0:
+                c.rollback()
+                return
+
+            if trade["action"] == "BUY":
+                gross = (price - trade["entry"]) * qty * CONTRACT_MULTIPLIER
+            else:
+                gross = (trade["entry"] - price) * qty * CONTRACT_MULTIPLIER
+
+            pnl = gross - (qty * COMMISSION_PER_CONTRACT)
+            risk = float(trade["risk_per_unit"]) * qty * CONTRACT_MULTIPLIER
+            r = pnl / risk if risk else 0
+            rem = float(trade["remaining_quantity"]) - qty
+            status = "CLOSED" if rem <= 0 else ("TP1_HIT" if reason == "TP1" else "TP2_HIT")
+
+            c.execute("""UPDATE trades SET remaining_quantity=?, status=?,
+                       exit_price=?, pnl=COALESCE(pnl,0)+?,
+                       r_multiple=COALESCE(r_multiple,0)+?, exit_reason=?
+                       WHERE trade_id=?""",
+                      (max(0, rem), status, price, pnl, r, reason, trade["trade_id"]))
+            c.commit()
+
+            s = get_state()
+            newp = s["realized_pnl"] + pnl
+            cs = s["consecutive_sl"]
+            if rem <= 0:
+                if reason == "STOP":
+                    cs += 1
+                elif pnl > 0:
+                    cs = 0
+            q_lock = int(cs >= MAX_CONSECUTIVE_SL or newp <= -ACCOUNT_EQUITY * MAX_DAILY_LOSS)
+            update_state(realized_pnl=newp, consecutive_sl=cs, quarantined=q_lock)
+        except Exception as e:
+            c.rollback()
+            log.exception("Error in realize transaction: %s", e)
+        finally:
+            c.close()
+
+
+def manage_paper():
+    t = open_trade()
+    if not t:
+        return {"status": "NO_OPEN_POSITION"}
+    mk = market()
+    if mk is None:
+        return {"status": "ERROR", "message": "market data unavailable"}
+    b = mk["5m"].iloc[-2]
+    hi, lo = float(b.High), float(b.Low)
+
+    total_qty = int(t["quantity"])
+
+    if t["action"] == "BUY":
+        if lo <= t["stop"]:
+            realize(t, t["stop"], t["remaining_quantity"], "STOP")
+            return {"status": "CLOSED", "reason": "STOP", "price": t["stop"]}
+        if not t["tp1_hit"] and hi >= t["tp1"]:
+            q = max(1, math.floor(total_qty * TP1_PCT)) if total_qty > 1 else total_qty
+            if q >= 1 and q <= float(t["remaining_quantity"]):
+                realize(t, t["tp1"], q, "TP1")
+                with db_lock:
+                    c = db()
+                    c.execute("""UPDATE trades SET tp1_hit=1, stop=? 
+                                WHERE trade_id=?""",
+                              (tick(t["entry"]), t["trade_id"]))
+                    c.commit()
+                    c.close()
+                return {"status": "TP1_HIT", "price": t["tp1"], "quantity": q}
+        t = open_trade() or t
+        if not t["tp2_hit"] and hi >= t["tp2"]:
+            q = max(1, math.floor(total_qty * TP2_PCT)) if total_qty > 1 else total_qty
+            if q >= 1 and q <= float(t["remaining_quantity"]):
+                realize(t, t["tp2"], q, "TP2")
+                with db_lock:
+                    c = db()
+                    c.execute("UPDATE trades SET tp2_hit=1 WHERE trade_id=?", (t["trade_id"],))
+                    c.commit()
+                    c.close()
+                return {"status": "TP2_HIT", "price": t["tp2"], "quantity": q}
+        t = open_trade() or t
+        if t and float(t["remaining_quantity"]) > 0 and hi >= t["runner"]:
+            realize(t, t["runner"], t["remaining_quantity"], "RUNNER")
+            return {"status": "CLOSED", "reason": "RUNNER", "price": t["runner"]}
+    else:
+        if hi >= t["stop"]:
+            realize(t, t["stop"], t["remaining_quantity"], "STOP")
+            return {"status": "CLOSED", "reason": "STOP", "price": t["stop"]}
+        if not t["tp1_hit"] and lo <= t["tp1"]:
+            q = max(1, math.floor(total_qty * TP1_PCT)) if total_qty > 1 else total_qty
+            if q >= 1 and q <= float(t["remaining_quantity"]):
+                realize(t, t["tp1"], q, "TP1")
+                with db_lock:
+                    c = db()
+                    c.execute("""UPDATE trades SET tp1_hit=1, stop=?
+                                WHERE trade_id=?""",
+                              (tick(t["entry"]), t["trade_id"]))
+                    c.commit()
+                    c.close()
